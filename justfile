@@ -1,5 +1,5 @@
-name := 'cosmic-ext-applet-pomodoro'
-appid := 'com.github.bgub.CosmicExtAppletPomodoro'
+name := 'cosmic-ext-applet-vitals'
+appid := 'com.github.bgub.CosmicExtAppletVitals'
 
 rootdir := ''
 prefix := '/usr'
@@ -47,7 +47,7 @@ build-vendored *args: vendor-extract (build-release '--frozen --offline' args)
 
 # Runs a clippy check
 check *args:
-    cargo clippy --all-features {{args}} -- -W clippy::pedantic
+    cargo clippy {{args}} -- -W clippy::pedantic
 
 # Runs a clippy check with JSON message format
 check-json: (check '--message-format=json')

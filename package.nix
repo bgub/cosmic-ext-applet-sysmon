@@ -8,17 +8,17 @@
   nix-update-script,
 }:
 rustPlatform.buildRustPackage (finalAttrs: {
-  pname = "cosmic-ext-applet-pomodoro";
+  pname = "cosmic-ext-applet-vitals";
   version = "0.1.0";
 
   src = fetchFromGitHub {
     owner = "bgub";
-    repo = "cosmic-ext-applet-pomodoro";
+    repo = "cosmic-ext-applet-vitals";
     tag = finalAttrs.version;
-    hash = "sha256-Ep0osOVon8DvhvQSHjAzYGrFBtEaqrVATOAnG4ujnYc=";
+    hash = lib.fakeHash;
   };
 
-  cargoHash = "sha256-ocELklj50LkRhXMF4igT6jIxOWPdY3Cr74CceB+0v24=";
+  cargoHash = lib.fakeHash;
 
   nativeBuildInputs = [
     libcosmicAppHook
@@ -34,17 +34,17 @@ rustPlatform.buildRustPackage (finalAttrs: {
     (placeholder "out")
     "--set"
     "bin-src"
-    "target/${stdenv.hostPlatform.rust.cargoShortTarget}/release/cosmic-ext-applet-pomodoro"
+    "target/${stdenv.hostPlatform.rust.cargoShortTarget}/release/cosmic-ext-applet-vitals"
   ];
 
   passthru.updateScript = nix-update-script { };
 
   meta = {
-    description = "A pomodoro timer applet for the COSMIC desktop";
-    homepage = "https://github.com/bgub/cosmic-ext-applet-pomodoro";
-    changelog = "https://github.com/bgub/cosmic-ext-applet-pomodoro/releases/tag/${finalAttrs.version}";
+    description = "A system vitals applet for the COSMIC desktop";
+    homepage = "https://github.com/bgub/cosmic-ext-applet-vitals";
+    changelog = "https://github.com/bgub/cosmic-ext-applet-vitals/releases/tag/${finalAttrs.version}";
     license = lib.licenses.mpl20;
-    mainProgram = "cosmic-ext-applet-pomodoro";
+    mainProgram = "cosmic-ext-applet-vitals";
     maintainers = with lib.maintainers; [ ];
     platforms = lib.platforms.linux;
   };

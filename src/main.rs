@@ -1,16 +1,44 @@
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: GPL-3.0-only
 
-mod app;
+mod applet;
+mod components {
+    pub mod bar;
+    pub mod gpu;
+    pub mod run;
+}
+mod views;
+
+mod color;
 mod config;
-mod i18n;
+mod history;
+mod localization;
+
+use applet::{Flags, ID, SystemMonitorApplet};
+use config::{CONFIG_VERSION, Config};
+use cosmic::cosmic_config::{Config as CosmicConfig, CosmicConfigEntry};
 
 fn main() -> cosmic::iced::Result {
-    // Get the system's preferred languages.
-    let requested_languages = i18n_embed::DesktopLanguageRequester::requested_languages();
+    let (config_handler, config) = match CosmicConfig::new(ID, CONFIG_VERSION) {
+        Ok(config_handler) => {
+            let config = match Config::get_entry(&config_handler) {
+                Ok(ok) => ok,
+                Err((errs, config)) => {
+                    println!("errors loading config: {errs:?}");
+                    config
+                }
+            };
+            (Some(config_handler), config)
+        }
+        Err(err) => {
+            println!("failed to create config handler: {err}");
+            (None, Config::default())
+        }
+    };
 
-    // Enable localizations to be applied.
-    i18n::init(&requested_languages);
+    let flags = Flags {
+        config_handler,
+        config,
+    };
 
-    // Starts the applet's event loop with `()` as the application's flags.
-    cosmic::applet::run::<app::AppModel>(())
+    cosmic::applet::run::<SystemMonitorApplet>(flags)
 }

@@ -1,13 +1,13 @@
 [Desktop Entry]
-Name=Pomodoro Timer
-Comment=A pomodoro timer applet for the COSMIC desktop
+Name=Vitals
+Comment=A system vitals applet for the COSMIC desktop
 Type=Application
-Icon=com.github.bgub.CosmicExtAppletPomodoro
-Exec=cosmic-ext-applet-pomodoro %F
+Icon=com.github.bgub.CosmicExtAppletVitals
+Exec=cosmic-ext-applet-vitals %F
 Terminal=false
 StartupNotify=true
 Categories=COSMIC
-Keywords=COSMIC;pomodoro;timer
+Keywords=COSMIC;vitals;system;monitor;cpu;ram
 NoDisplay=true
 X-CosmicApplet=true
 X-CosmicHoverPopup=Auto
