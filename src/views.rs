@@ -1,5 +1,5 @@
 use crate::{
-    applet::{Message, SystemMonitorApplet, base_background},
+    applet::{base_background, Message, SystemMonitorApplet},
     color::Color,
     components::{
         bar::PercentageBar,
@@ -9,9 +9,9 @@ use crate::{
     config::{CpuView, IoView, PaddingOption, PercentView},
 };
 use cosmic::{
+    iced::{padding, Alignment, Padding, Pixels, Size},
+    widget::{container, Column, Container, Row},
     Apply, Element, Renderer, Theme,
-    iced::{Alignment, Padding, Pixels, Size, padding},
-    widget::{Column, Container, Row, container},
 };
 use sysinfo::Cpu;
 
@@ -178,7 +178,25 @@ impl SystemMonitorApplet {
     pub fn padding(&self) -> Padding {
         match self.config.layout.padding {
             PaddingOption::Suggested => {
-                Into::<[u16; 2]>::into(self.core.applet.suggested_padding(false)).into()
+                // suggested_padding returns (major_axis, minor_axis)
+                // For horizontal panel: major=horizontal, minor=vertical
+                // For vertical panel: major=vertical, minor=horizontal
+                let (major, minor) = self.core.applet.suggested_padding(false);
+                if self.is_horizontal() {
+                    Padding {
+                        top: f32::from(minor),
+                        bottom: f32::from(minor),
+                        left: f32::from(major),
+                        right: f32::from(major),
+                    }
+                } else {
+                    Padding {
+                        top: f32::from(major),
+                        bottom: f32::from(major),
+                        left: f32::from(minor),
+                        right: f32::from(minor),
+                    }
+                }
             }
             PaddingOption::Custom(p) => p.into(),
         }

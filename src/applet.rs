@@ -6,7 +6,7 @@ use cosmic::{
     iced::Subscription,
     surface,
     widget::container,
-    Application, Apply as _, Element, Theme,
+    Application, Element, Theme,
 };
 use std::time::Duration;
 use sysinfo::{
@@ -127,17 +127,19 @@ impl Application for SystemMonitorApplet {
     }
 
     fn view(&'_ self) -> Element<'_, Message> {
-        let item_iter = self.config.components.iter().map(|module| {
-            match module {
+        let item_iter = self.config.components.iter().filter_map(|module| {
+            let elements = match module {
                 ComponentConfig::Cpu(vis) => self.cpu_view(vis),
                 ComponentConfig::Mem(vis) => self.mem_view(vis),
                 ComponentConfig::Net(vis) => self.net_view(vis),
                 ComponentConfig::Disk(vis) => self.disk_view(vis),
                 ComponentConfig::Gpu(vis) => self.gpu_view(vis),
+            };
+            // Skip empty groups (e.g. GPU when no GPUs are detected)
+            if elements.is_empty() {
+                return None;
             }
-            .apply(|elements| {
-                self.panel_collection(elements, self.config.layout.inner_spacing, 0.0)
-            })
+            Some(self.panel_collection(elements, self.config.layout.inner_spacing, 0.0))
         });
 
         let items = self.panel_collection(item_iter, self.config.layout.spacing, self.padding());
