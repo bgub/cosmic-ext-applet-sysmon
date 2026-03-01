@@ -1,9 +1,9 @@
 [package]
-name = "cosmic-ext-applet-vitals"
+name = "cosmic-ext-applet-sysmon"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0"
-description = "A system vitals applet for the COSMIC desktop"
+description = "A system monitor applet for the COSMIC desktop"
 
 [dependencies]
 i18n-embed-fl = "0.10"

@@ -1045,7 +1045,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmic-ext-applet-vitals"
+name = "cosmic-ext-applet-sysmon"
 version = "0.1.0"
 dependencies = [
  "i18n-embed",

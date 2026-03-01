@@ -1,5 +1,5 @@
-name := 'cosmic-ext-applet-vitals'
-appid := 'com.github.bgub.CosmicExtAppletVitals'
+name := 'cosmic-ext-applet-sysmon'
+appid := 'com.github.bgub.CosmicExtAppletSysmon'
 
 rootdir := ''
 prefix := '/usr'

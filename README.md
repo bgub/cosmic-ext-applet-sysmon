@@ -1,42 +1,44 @@
-# Pomodoro Timer
+# cosmic-ext-applet-sysmon
 
-A pomodoro timer applet for the COSMIC™ desktop. Sits in the panel and provides work/break interval tracking with configurable durations.
+A system monitor applet for the [COSMIC](https://github.com/pop-os/cosmic-epoch) desktop. Shows CPU, RAM, swap, network, disk, and GPU usage as live sparkline charts in the panel.
+
+This is a fork of [D-Brox/cosmic-ext-applet-system-monitor](https://github.com/D-Brox/cosmic-ext-applet-system-monitor) with two key changes:
+
+- **No wgpu dependency** — runs on the tiny_skia software renderer only, so it launches faster and works without a GPU driver
+- **Three iced tiny_skia bug fixes** that were required to make Canvas widgets render correctly without wgpu (see [docs/iced-tiny-skia-canvas-damage-bug.md](docs/iced-tiny-skia-canvas-damage-bug.md))
 
 ## Installation
 
-A [justfile](./justfile) is included by default for the [casey/just][just] command runner.
+Requires [just](https://github.com/casey/just).
 
-- `just` builds the application with the default `just build-release` recipe
-- `just run` builds and runs the application
-- `just install` installs the project into the system
-- `just vendor` creates a vendored tarball
-- `just build-vendored` compiles with vendored dependencies from that tarball
-- `just check` runs clippy on the project to check for linter warnings
-- `just check-json` can be used by IDEs that support LSP
+```sh
+just dev-install   # one-time setup: symlinks binary into ~/.local/bin, installs desktop/icon/metadata
+just dev-reload    # rebuild + restart cosmic-panel (for iterative development)
+just install-user  # copy binary to ~/.local (no root needed)
+just install       # install system-wide (requires root)
+```
 
-## Translators
+On NixOS, prefix commands with `direnv exec .` (or enter the direnv shell) since the toolchain comes from nix.
 
-[Fluent][fluent] is used for localization of the software. Fluent's translation files are found in the [i18n directory](./i18n). New translations may copy the [English (en) localization](./i18n/en) of the project, rename `en` to the desired [ISO 639-1 language code][iso-codes], and then translations can be provided for each [message identifier][fluent-guide]. If no translation is necessary, the message may be omitted.
+## Differences from upstream
+
+| | [upstream](https://github.com/D-Brox/cosmic-ext-applet-system-monitor) | this fork |
+|---|---|---|
+| Renderer | wgpu (GPU) | tiny_skia (software) |
+| Startup time | slower (wgpu init) | faster |
+| GPU required | yes (for wgpu) | no |
+| Features | identical | identical |
+
+The iced tiny_skia fixes in this fork have been submitted upstream and may be merged into [pop-os/iced](https://github.com/pop-os/iced) in the future.
 
 ## Packaging
-
-If packaging for a Linux distribution, vendor dependencies locally with the `vendor` rule, and build with the vendored sources using the `build-vendored` rule. When installing files, use the `rootdir` and `prefix` variables to change installation paths.
 
 ```sh
 just vendor
 just build-vendored
-just rootdir=debian/cosmic-ext-applet-pomodoro prefix=/usr install
+just rootdir=debian/cosmic-ext-applet-sysmon prefix=/usr install
 ```
 
-It is recommended to build a source tarball with the vendored dependencies, which can typically be done by running `just vendor` on the host system before it enters the build environment.
+## Translators
 
-## Developers
-
-Developers should install [rustup][rustup] and configure their editor to use [rust-analyzer][rust-analyzer].
-
-[fluent]: https://projectfluent.org/
-[fluent-guide]: https://projectfluent.org/fluent/guide/hello.html
-[iso-codes]: https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-[just]: https://github.com/casey/just
-[rustup]: https://rustup.rs/
-[rust-analyzer]: https://rust-analyzer.github.io/
+Translation files are in [i18n/](./i18n) using [Fluent](https://projectfluent.org/). Copy the [English](./i18n/en) directory, rename it to your [ISO 639-1 language code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes), and translate the messages.

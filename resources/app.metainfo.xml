@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.github.bgub.CosmicExtAppletVitals</id>
+  <id>com.github.bgub.CosmicExtAppletSysmon</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MPL-2.0</project_license>
-  <name>Vitals</name>
-  <summary>A system vitals applet for the COSMIC desktop</summary>
-  <launchable type="desktop-id">com.github.bgub.CosmicExtAppletVitals.desktop</launchable>
+  <project_license>GPL-3.0</project_license>
+  <name>System Monitor</name>
+  <summary>A system monitor applet for the COSMIC desktop</summary>
+  <launchable type="desktop-id">com.github.bgub.CosmicExtAppletSysmon.desktop</launchable>
   <provides>
-    <id>com.github.bgub.CosmicExtAppletVitals</id>
+    <id>com.github.bgub.CosmicExtAppletSysmon</id>
     <binaries>
-      <binary>cosmic-ext-applet-vitals</binary>
+      <binary>cosmic-ext-applet-sysmon</binary>
     </binaries>
   </provides>
   <requires>
@@ -25,11 +25,13 @@
   </categories>
   <keywords>
     <keyword>COSMIC</keyword>
-    <keyword>vitals</keyword>
     <keyword>system</keyword>
     <keyword>monitor</keyword>
     <keyword>cpu</keyword>
     <keyword>ram</keyword>
+    <keyword>network</keyword>
+    <keyword>disk</keyword>
+    <keyword>gpu</keyword>
   </keywords>
   <content_rating type="oars-1.1" />
 </component>

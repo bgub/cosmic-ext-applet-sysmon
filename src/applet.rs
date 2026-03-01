@@ -19,7 +19,7 @@ use crate::{
     history::History,
 };
 
-pub const ID: &str = "com.github.bgub.CosmicExtAppletVitals";
+pub const ID: &str = "com.github.bgub.CosmicExtAppletSysmon";
 
 pub struct SystemMonitorApplet {
     pub core: Core,
