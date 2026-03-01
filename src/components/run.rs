@@ -62,39 +62,63 @@ macro_rules! impl_program_history_chart {
                 let mut line = Frame::new(renderer, bounds.size());
                 let color = self.color.as_cosmic_color(theme);
 
-                let mut path_builder = path::Builder::new();
                 let x_step = bounds.width / (self.history.len() - 1) as f32;
                 let y_step = if self.max as f32 != 0.0 {
                      bounds.height / self.max as f32
                 } else {
                     1.0
                 };
-                path_builder.move_to(Point {
+
+                // Build the fill path: closed polygon with bottom edge for the
+                // filled area under the data line.
+                let mut fill_builder = path::Builder::new();
+                fill_builder.move_to(Point {
                     x: 0.0,
                     y: bounds.height,
                 });
-
                 for (i, j) in self.history.iter().enumerate() {
                     let x = i as f32 * x_step;
                     let y = bounds.height - *j as f32 * y_step;
-                    path_builder.line_to(Point{x,y});
+                    fill_builder.line_to(Point { x, y });
                 }
-
-                path_builder.line_to(Point {
+                fill_builder.line_to(Point {
                     x: bounds.width,
                     y: bounds.height,
                 });
+                let fill_path = fill_builder.build();
 
-                let path = path_builder.build();
+                // Build the stroke path: only the data line, no bottom or side
+                // edges. Skip zero-value points to avoid drawing a line at the
+                // very bottom of the chart when there is no activity.
+                let mut line_builder = path::Builder::new();
+                let mut need_move = true;
+                for (i, j) in self.history.iter().enumerate() {
+                    let val = *j as f32;
+                    if val == 0.0 {
+                        need_move = true;
+                        continue;
+                    }
+                    let x = i as f32 * x_step;
+                    let y = bounds.height - val * y_step;
+                    let pt = Point { x, y };
+                    if need_move {
+                        line_builder.move_to(pt);
+                        need_move = false;
+                    } else {
+                        line_builder.line_to(pt);
+                    }
+                }
+                let line_path = line_builder.build();
+
                 fill.fill(
-                    &path,
+                    &fill_path,
                     Fill {
                         style: stroke::Style::Solid(color.with_alpha(0.5).into()),
                         ..Default::default()
                     },
                 );
                 line.stroke(
-                    &path,
+                    &line_path,
                     Stroke {
                         style: stroke::Style::Solid(color.into()),
                         width: 1.0,
