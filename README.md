@@ -2,7 +2,7 @@
 
 A system monitor applet for the [COSMIC](https://github.com/pop-os/cosmic-epoch) desktop. Shows CPU, RAM, swap, network, disk, and GPU usage as live sparkline charts in the panel. Click the applet to open a popup with live metric summaries and toggles to show/hide each component.
 
-<!-- TODO: screenshot -->
+![Screenshot showing the applet in the panel with sparkline charts and the popup with metric summaries and visibility toggles](screenshot.png)
 
 This is a fork of [D-Brox/cosmic-ext-applet-system-monitor](https://github.com/D-Brox/cosmic-ext-applet-system-monitor) with two key changes:
 
