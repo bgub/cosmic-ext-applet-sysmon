@@ -1,11 +1,29 @@
 use nvml_wrapper::{Device, Nvml, error::NvmlError};
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs::read_dir;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 const NV_VENDOR_ID: u16 = 0x10DE;
-static NVML: LazyLock<Result<Nvml, NvmlError>> = LazyLock::new(Nvml::init);
+
+/// NixOS puts NVIDIA libs in /run/opengl-driver/lib which isn't in the default
+/// library search path. Try the default dlopen first, then fall back to the
+/// absolute path.
+static NVML: LazyLock<Result<Nvml, NvmlError>> = LazyLock::new(|| {
+    Nvml::init().or_else(|e| {
+        eprintln!("gpu: NVML default init failed: {e}, trying /run/opengl-driver/lib");
+        Nvml::builder()
+            .lib_path(OsStr::new(
+                "/run/opengl-driver/lib/libnvidia-ml.so.1",
+            ))
+            .init()
+            .map_err(|e2| {
+                eprintln!("gpu: NVML fallback init also failed: {e2}");
+                e2
+            })
+    })
+});
 
 pub struct Gpus {
     inner: Vec<Gpu>,
@@ -72,7 +90,7 @@ impl Gpus {
                         let driver = uevent.get("DRIVER").map(String::as_str);
 
                         if vendor == Some(NV_VENDOR_ID) || driver == Some("nvidia") {
-                            let pci_slot = uevent.get("PCI_SLOT_NAME").cloned()?;
+                            let pci_slot = uevent.get("PCI_SLOT_NAME")?;
                             Gpu::new_nvidia(pci_slot)
                         } else {
                             Gpu::new(sysfs_path)
@@ -119,18 +137,40 @@ fn match_card_device(s: &str) -> Option<()> {
 
 impl Gpu {
     fn new(sysfs_path: PathBuf) -> Option<Self> {
+        let usage = read_syspath(&sysfs_path, "gpu_busy_percent");
+        let used_vram = read_syspath(&sysfs_path, "mem_info_vram_used");
+        let total_vram = read_syspath(&sysfs_path, "mem_info_vram_total");
+
+        if usage.is_none() || used_vram.is_none() || total_vram.is_none() {
+            eprintln!(
+                "gpu: skipping sysfs GPU at {}: missing files (gpu_busy_percent={}, mem_info_vram_used={}, mem_info_vram_total={})",
+                sysfs_path.display(),
+                usage.is_some(),
+                used_vram.is_some(),
+                total_vram.is_some(),
+            );
+            return None;
+        }
+
         Some(Self {
             data: GpuData {
-                usage: read_syspath(&sysfs_path, "gpu_busy_percent")?,
-                used_vram: read_syspath(&sysfs_path, "mem_info_vram_used")?,
-                total_vram: read_syspath(&sysfs_path, "mem_info_vram_total")?,
+                usage: usage?,
+                used_vram: used_vram?,
+                total_vram: total_vram?,
             },
             vendor: GpuType::PlugAndPlay { sysfs_path },
         })
     }
 
-    fn new_nvidia(pci_slot: String) -> Option<Self> {
-        let device = NVML.as_ref().ok()?.device_by_pci_bus_id(pci_slot).ok()?;
+    fn new_nvidia(pci_slot: &str) -> Option<Self> {
+        let nvml = NVML.as_ref().ok()?;
+        let device = match nvml.device_by_pci_bus_id(pci_slot) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("gpu: NVML device lookup failed for {pci_slot}: {e}");
+                return None;
+            }
+        };
         let utilization = device.utilization_rates().ok()?;
         let meminfo = device.memory_info().ok()?;
 

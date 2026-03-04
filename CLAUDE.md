@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A system vitals applet for the COSMIC desktop showing CPU, RAM, and Swap usage as sparkline charts in the panel. Right-click opens a settings popup with toggles and refresh interval control. This repo also serves as a **reference implementation** for building COSMIC applets.
+A system monitor applet for the COSMIC desktop showing CPU, RAM, Swap, Network, Disk, and GPU metrics as configurable run charts and bar charts in the panel. Configuration is persisted via cosmic-config (no popup UI yet — edit config entries directly or via `cosmic-config`). Ported from / inspired by `cosmic-ext-applet-system-monitor`.
 
 ## Build Commands
 
@@ -33,7 +33,7 @@ use nix ~/.config/nix/cosmic-shell.nix
 Key details:
 - **Always use `direnv exec .`** when running build/check/run commands outside the direnv shell — without it, `cc` linker and native libs won't be found
 - `RUSTFLAGS` must force-link dlopen'd libraries (EGL, wayland, vulkan, xkbcommon, X11) — same approach as `libcosmicAppHook` in nixos-cosmic
-- `LD_LIBRARY_PATH` is needed at runtime for those same libraries
+- `LD_LIBRARY_PATH` is needed at runtime for those same libraries, plus `/run/opengl-driver/lib` for NVIDIA's `libnvidia-ml.so` (NVML)
 - `~/.local/bin` must be in PATH (`environment.localBinInPath = true` in NixOS config)
 - On NixOS, `/usr/share` is NOT in `XDG_DATA_DIRS` — use `install-user` or `dev-install` instead of `just install`
 
@@ -41,59 +41,61 @@ Key details:
 
 ```
 src/
-  main.rs       — entry point, i18n init, launches cosmic::applet::run::<AppModel>()
-  app.rs        — core: AppModel state, Message enum, view/update/subscription
-  chart.rs      — History circular buffer + SparklineChart Canvas Program
-  config.rs     — Config struct with #[derive(CosmicConfigEntry)], persisted via cosmic-config
-  i18n.rs       — fluent localization via i18n-embed, fl!("key") macro
+  main.rs          — entry point, config init, launches cosmic::applet::run::<SystemMonitorApplet>()
+  applet.rs        — core: SystemMonitorApplet state, Message enum, Application impl (init/view/update/subscription)
+  views.rs         — view helper functions: cpu_view, mem_view, net_view, disk_view, gpu_view
+  config.rs        — Config/SamplingConfig/ComponentConfig structs, CosmicConfigEntry impl, config subscription
+  color.rs         — Color enum mapping cosmic palette colors + arbitrary RGB for chart theming
+  history.rs       — History<T> generic circular buffer for time-series data
+  localization.rs  — fluent localization via i18n-embed, fl!("key") macro
+  components/
+    run.rs         — Canvas-based run charts (HistoryChart, SimpleHistoryChart, SuperimposedHistoryChart)
+    bar.rs         — PercentageBar custom widget for CPU core bars, sorted bar charts
+    gpu.rs         — GPU detection: NVIDIA via NVML, AMD/others via sysfs (gpu_busy_percent, mem_info_vram_*)
 resources/
-  icon.svg      — pulse/chart SVG icon using currentColor + stroke
-  app.desktop   — desktop entry with applet keys
+  icon.svg         — pulse/chart SVG icon using currentColor + stroke
+  app.desktop      — desktop entry with X-CosmicApplet keys
   app.metainfo.xml
 i18n/en/
-  cosmic_ext_applet_vitals.ftl  — English fluent strings
+  cosmic_ext_applet_sysmon.ftl — English fluent strings
 ```
 
 ## Architecture
 
 COSMIC applets follow an Elm-like architecture via `cosmic::Application`.
 
-### Panel Button (`view()`)
+### Panel View (`view()`)
 
-- `view()` renders the panel button showing sparkline charts for enabled metrics (CPU/RAM/Swap)
-- Each chart is a `Canvas` widget with `SparklineChart` program, sized 36x18 pixels
-- Uses `widget::button::custom(autosize_window(row)).class(cosmic::theme::Button::AppletIcon)`
-- Both left-click and right-click open the popup
-
-### Popup (`view_window()`)
-
-- `view_window()` renders the settings popup with:
-  - "Vitals" heading
-  - Togglers for CPU/RAM/Swap (showing current percentage)
-  - Refresh interval spin button (200-5000ms, step 100)
-- Wrapped with `self.core.applet.popup_container(content)`
-- Popups use `get_popup()` / `destroy_popup()` from `cosmic::iced_winit::commands::popup`
+- `view()` iterates `config.components` and calls per-metric view helpers in `views.rs`
+- Each component (CPU, Mem, Net, Disk, GPU) returns a collection of chart widgets
+- Charts: `Canvas`-based run charts (`components/run.rs`) and custom `PercentageBar` widgets (`components/bar.rs`)
+- Empty groups are skipped (e.g. GPU when no GPUs detected)
+- Layout respects `config.layout` settings (padding, spacing, inner_spacing)
+- Uses `self.core.applet.autosize_window(items)` for panel sizing
 
 ### Subscriptions
 
-Uses `cosmic::iced::time::every(Duration)` for periodic system sampling — simpler than channel-based subscriptions. The interval is configurable via `config.refresh_interval_ms`. Config watcher subscription watches for external changes.
+- Separate tick messages per component: `TickCpu`, `TickMem`, `TickNet`, `TickDisk`, `TickGpu`
+- Each uses `cosmic::iced::time::every(Duration)` with per-component intervals from `config.sampling`
+- Config watcher subscription via `config_subscription()` watches for external changes
 
 ### System Metrics
 
-- Uses `sysinfo` crate with selective refresh: `RefreshKind::nothing().with_cpu(...).with_memory(...)`
-- On each tick: `sys.refresh_cpu_usage()` + `sys.refresh_memory()`
-- CPU: `sys.global_cpu_usage()` (already a percentage)
-- RAM/Swap: computed as `used / total * 100.0`
-- All values stored as `f32` 0-100 in `History` circular buffers (capacity 60)
+- **CPU**: `sysinfo` with `CpuRefreshKind::nothing().with_cpu_usage()` — `global_cpu_usage()` as f32
+- **RAM/Swap**: `sysinfo` with `MemoryRefreshKind::everything()` — stored as raw u64 bytes
+- **Network**: `sysinfo::Networks` — upload/download bytes between refreshes
+- **Disk**: `sysinfo::Disks` with `DiskRefreshKind::nothing().with_io_usage()` — read/write bytes between refreshes
+- **GPU**: `components/gpu.rs` — NVIDIA via `nvml-wrapper` crate (NVML), AMD via sysfs (`gpu_busy_percent`, `mem_info_vram_*`). Intel iGPUs (i915) lack these sysfs files and are skipped with a diagnostic log
+- All values stored in `History<T>` circular buffers (capacity from `config.sampling.*.sampling_window`)
 
 ### Config Persistence
 
-- `Config` struct derives `CosmicConfigEntry` with `#[version = 1]`
-- Fields: `show_cpu`, `show_ram`, `show_swap` (booleans), `refresh_interval_ms` (u32)
-- Store `config_handler: Option<cosmic_config::Config>` in the model to write changes back
-- Read in `init()` via `cosmic_config::Config::new(APP_ID, Config::VERSION)` then `Config::get_entry(&handler)`
-- Write with `self.config.write_entry(&handler)`
-- Watch for external changes via `self.core().watch_config::<Config>(APP_ID)` in `subscription()`
+- `Config` implements `CosmicConfigEntry` manually (not derived) with `VERSION = 2`
+- Top-level fields: `sampling` (`SamplingConfig`), `components` (`Box<[ComponentConfig]>`), `layout` (`LayoutConfig`), `tooltip_enabled` (bool)
+- `ComponentConfig` enum variants: `Cpu`, `Mem`, `Net`, `Disk`, `Gpu` — each with view configuration (run charts, bar charts, colors, aspect ratios)
+- `SamplingConfig` has per-component `Sampling { update_interval, sampling_window }`
+- Read in `main.rs` via `cosmic_config::Config::new(ID, CONFIG_VERSION)` then `Config::get_entry(&handler)`
+- Config changes watched via `config_subscription()` → `Message::Config`
 
 ### Desktop Entry
 
@@ -134,24 +136,27 @@ widget::spin_button(
 
 ## Cargo Features
 
-Minimal libcosmic features for an applet (no wgpu — uses software renderer):
+Minimal libcosmic — just `applet` feature (includes wayland, winit, multi-window, etc.):
 
 ```toml
 [dependencies.libcosmic]
-git = "https://github.com/pop-os/libcosmic.git"
-features = ["applet", "applet-token", "dbus-config", "multi-window", "tokio", "wayland", "winit"]
+git = "https://github.com/bgub/libcosmic.git"  # fork with tiny_skia Canvas damage fix
+default-features = false
+features = ["applet"]
 ```
+
+Additional dependencies: `sysinfo` (CPU/RAM/Swap/Net/Disk), `nvml-wrapper` (NVIDIA GPU via NVML), `serde` (config serialization).
 
 ## Publishing
 
 ### GitHub
 
-- **Repo**: https://github.com/bgub/cosmic-ext-applet-vitals
+- **Repo**: https://github.com/bgub/cosmic-ext-applet-sysmon
 - Releases use `just tag <version>` then `git push origin main --tags`
 
 ### NixOS (nixpkgs)
 
-- Package at `pkgs/by-name/co/cosmic-ext-applet-vitals/package.nix` in nixpkgs
+- Package at `pkgs/by-name/co/cosmic-ext-applet-sysmon/package.nix` in nixpkgs
 - A local copy is at `package.nix` in this repo for reference
 - Uses `rustPlatform.buildRustPackage` + `libcosmicAppHook` + `just`
 - Key nix build details: `dontUseJustBuild = true`, `dontUseJustCheck = true` — cargo builds, just only installs
