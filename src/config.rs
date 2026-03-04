@@ -23,6 +23,66 @@ pub struct Config {
     pub components: Box<[ComponentConfig]>,
     pub layout: LayoutConfig,
     pub tooltip_enabled: bool,
+    #[serde(default)]
+    pub visibility: Visibility,
+}
+
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Visibility {
+    pub cpu: bool,
+    pub mem: bool,
+    pub net: bool,
+    pub disk: bool,
+    pub gpu: bool,
+}
+
+impl Default for Visibility {
+    fn default() -> Self {
+        Self {
+            cpu: true,
+            mem: true,
+            net: true,
+            disk: true,
+            gpu: true,
+        }
+    }
+}
+
+impl Visibility {
+    pub fn any_visible(self) -> bool {
+        self.cpu || self.mem || self.net || self.disk || self.gpu
+    }
+
+    pub fn toggle(&mut self, kind: ComponentKind) {
+        let field = match kind {
+            ComponentKind::Cpu => &mut self.cpu,
+            ComponentKind::Mem => &mut self.mem,
+            ComponentKind::Net => &mut self.net,
+            ComponentKind::Disk => &mut self.disk,
+            ComponentKind::Gpu => &mut self.gpu,
+        };
+        *field = !*field;
+    }
+
+    pub fn get(self, kind: ComponentKind) -> bool {
+        match kind {
+            ComponentKind::Cpu => self.cpu,
+            ComponentKind::Mem => self.mem,
+            ComponentKind::Net => self.net,
+            ComponentKind::Disk => self.disk,
+            ComponentKind::Gpu => self.gpu,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentKind {
+    Cpu,
+    Mem,
+    Net,
+    Disk,
+    Gpu,
 }
 
 impl CosmicConfigEntry for Config {
@@ -33,6 +93,7 @@ impl CosmicConfigEntry for Config {
         ConfigSet::set(&tx, "components", &self.components)?;
         ConfigSet::set(&tx, "layout", &self.layout)?;
         ConfigSet::set(&tx, "tooltip_enabled", self.tooltip_enabled)?;
+        ConfigSet::set(&tx, "visibility", self.visibility)?;
         tx.commit()
     }
     fn get_entry(config: &CosmicConfig) -> Result<Self, (Vec<ConfigError>, Self)> {
@@ -59,6 +120,7 @@ impl CosmicConfigEntry for Config {
         config_get!(components, Box<[ComponentConfig]>);
         config_get!(layout, LayoutConfig);
         config_get!(tooltip_enabled, bool);
+        config_get!(visibility, Visibility);
 
         if errors.is_empty() {
             Ok(default)
@@ -97,6 +159,7 @@ impl CosmicConfigEntry for Config {
                 "components" => config_set!(components, Box<[ComponentConfig]>),
                 "layout" => config_set!(layout, LayoutConfig),
                 "tooltip_enabled" => config_set!(tooltip_enabled, bool),
+                "visibility" => config_set!(visibility, Visibility),
                 _ => {}
             }
         }
@@ -267,6 +330,7 @@ impl Default for Config {
             .into(),
             sampling: SamplingConfig::default(),
             tooltip_enabled: false,
+            visibility: Visibility::default(),
         }
     }
 }

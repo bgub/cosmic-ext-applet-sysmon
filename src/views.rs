@@ -25,7 +25,7 @@ fn sized_container<'a>(
         .style(base_background)
 }
 
-fn format_bytes(bytes: u64) -> String {
+pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     #[allow(clippy::cast_precision_loss)]
     let mut size = bytes as f64;

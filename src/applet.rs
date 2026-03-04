@@ -2,10 +2,13 @@
 
 use cosmic::{
     app::{Core, Task},
-    cosmic_config,
-    iced::Subscription,
-    surface,
-    widget::container,
+    cosmic_config::{self, ConfigSet},
+    iced::{window::Id, Rectangle, Subscription},
+    surface::{
+        self,
+        action::{app_popup, destroy_popup},
+    },
+    widget::{self, container, list_column, settings::item::builder as settings_builder},
     Application, Element, Theme,
 };
 use std::time::Duration;
@@ -15,8 +18,9 @@ use sysinfo::{
 
 use crate::{
     components::gpu::Gpus,
-    config::{config_subscription, ComponentConfig, Config},
+    config::{config_subscription, ComponentConfig, ComponentKind, Config},
     history::History,
+    views::format_bytes,
 };
 
 pub const ID: &str = "com.github.bgub.CosmicExtAppletSysmon";
@@ -26,6 +30,7 @@ pub struct SystemMonitorApplet {
     pub config: Config,
     #[allow(dead_code)]
     config_handler: Option<cosmic_config::Config>,
+    popup: Option<Id>,
 
     pub sys: System,
     pub nets: Networks,
@@ -57,6 +62,8 @@ pub enum Message {
     TickNet,
     TickDisk,
     TickGpu,
+    ToggleVisibility(ComponentKind),
+    PopupClosed(Id),
     Surface(surface::Action),
 }
 
@@ -100,6 +107,7 @@ impl Application for SystemMonitorApplet {
             core,
             config: flags.config,
             config_handler: flags.config_handler,
+            popup: None,
 
             global_cpu: History::with_capacity(cpu),
             ram: History::with_capacity(mem),
@@ -126,29 +134,92 @@ impl Application for SystemMonitorApplet {
         (app, Task::none())
     }
 
+    fn on_close_requested(&self, id: Id) -> Option<Message> {
+        Some(Message::PopupClosed(id))
+    }
+
     fn view(&'_ self) -> Element<'_, Message> {
-        let item_iter = self.config.components.iter().filter_map(|module| {
-            let elements = match module {
-                ComponentConfig::Cpu(vis) => self.cpu_view(vis),
-                ComponentConfig::Mem(vis) => self.mem_view(vis),
-                ComponentConfig::Net(vis) => self.net_view(vis),
-                ComponentConfig::Disk(vis) => self.disk_view(vis),
-                ComponentConfig::Gpu(vis) => self.gpu_view(vis),
-            };
-            // Skip empty groups (e.g. GPU when no GPUs are detected)
-            if elements.is_empty() {
-                return None;
-            }
-            Some(self.panel_collection(elements, self.config.layout.inner_spacing, 0.0))
-        });
+        let visibility = &self.config.visibility;
 
-        let items = self.panel_collection(item_iter, self.config.layout.spacing, self.padding());
+        let content: Element<'_, Message> = if visibility.any_visible() {
+            let item_iter = self.config.components.iter().filter_map(|module| {
+                let (kind, elements) = match module {
+                    ComponentConfig::Cpu(vis) => (ComponentKind::Cpu, self.cpu_view(vis)),
+                    ComponentConfig::Mem(vis) => (ComponentKind::Mem, self.mem_view(vis)),
+                    ComponentConfig::Net(vis) => (ComponentKind::Net, self.net_view(vis)),
+                    ComponentConfig::Disk(vis) => (ComponentKind::Disk, self.disk_view(vis)),
+                    ComponentConfig::Gpu(vis) => (ComponentKind::Gpu, self.gpu_view(vis)),
+                };
+                if !visibility.get(kind) || elements.is_empty() {
+                    return None;
+                }
+                Some(self.panel_collection(elements, self.config.layout.inner_spacing, 0.0))
+            });
 
-        self.core.applet.autosize_window(items).into()
+            let items =
+                self.panel_collection(item_iter, self.config.layout.spacing, self.padding());
+            self.core.applet.autosize_window(items).into()
+        } else {
+            widget::icon::from_name(ID).size(24).icon().into()
+        };
+
+        let have_popup = self.popup;
+        widget::button::custom(content)
+            .class(cosmic::theme::Button::AppletIcon)
+            .on_press_with_rectangle(move |offset, bounds| {
+                if let Some(id) = have_popup {
+                    Message::Surface(destroy_popup(id))
+                } else {
+                    #[allow(clippy::cast_possible_truncation)]
+                    Message::Surface(app_popup::<SystemMonitorApplet>(
+                        move |state: &mut SystemMonitorApplet| {
+                            let new_id = Id::unique();
+                            state.popup = Some(new_id);
+                            let mut popup_settings = state.core.applet.get_popup_settings(
+                                state.core.main_window_id().unwrap(),
+                                new_id,
+                                None,
+                                None,
+                                None,
+                            );
+                            popup_settings.positioner.anchor_rect = Rectangle {
+                                x: (bounds.x - offset.x) as i32,
+                                y: (bounds.y - offset.y) as i32,
+                                width: bounds.width as i32,
+                                height: bounds.height as i32,
+                            };
+                            popup_settings
+                        },
+                        Some(Box::new(|state: &SystemMonitorApplet| {
+                            Element::from(state.core.applet.popup_container(state.popup_view()))
+                                .map(cosmic::Action::App)
+                        })),
+                    ))
+                }
+            })
+            .into()
+    }
+
+    fn view_window(&self, _id: Id) -> Element<'_, Message> {
+        // Fallback — popup views are registered via app_popup closures
+        widget::text("").into()
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::PopupClosed(id) => {
+                if self.popup.as_ref() == Some(&id) {
+                    self.popup = None;
+                }
+            }
+            Message::ToggleVisibility(kind) => {
+                self.config.visibility.toggle(kind);
+                if let Some(handler) = &self.config_handler {
+                    let tx = handler.transaction();
+                    let _ = ConfigSet::set(&tx, "visibility", self.config.visibility);
+                    let _ = tx.commit();
+                }
+            }
             Message::Config(config) => {
                 self.config = config;
                 let sampĺing = &self.config.sampling;
@@ -249,6 +320,97 @@ impl Application for SystemMonitorApplet {
 
     fn style(&self) -> Option<cosmic::iced_runtime::Appearance> {
         Some(cosmic::applet::style())
+    }
+}
+
+impl SystemMonitorApplet {
+    fn popup_view(&self) -> Element<'_, Message> {
+        let vis = &self.config.visibility;
+        let mut items = list_column().padding(5).spacing(0);
+
+        // CPU
+        items = items.add(
+            settings_builder(format!("CPU: {:.1}%", self.sys.global_cpu_usage()))
+                .toggler(vis.cpu, |_| Message::ToggleVisibility(ComponentKind::Cpu)),
+        );
+
+        // Memory (RAM + Swap nested)
+        let total_swap = self.sys.total_swap();
+        let mem_description = if total_swap > 0 {
+            format!(
+                "RAM: {} / {}  |  Swap: {} / {}",
+                format_bytes(self.sys.used_memory()),
+                format_bytes(self.sys.total_memory()),
+                format_bytes(self.sys.used_swap()),
+                format_bytes(total_swap),
+            )
+        } else {
+            format!(
+                "RAM: {} / {}",
+                format_bytes(self.sys.used_memory()),
+                format_bytes(self.sys.total_memory()),
+            )
+        };
+        items = items.add(
+            settings_builder("Memory")
+                .description(mem_description)
+                .toggler(vis.mem, |_| Message::ToggleVisibility(ComponentKind::Mem)),
+        );
+
+        // Network
+        let upload = self.upload.iter().last().copied().unwrap_or(0);
+        let download = self.download.iter().last().copied().unwrap_or(0);
+        items = items.add(
+            settings_builder("Network")
+                .description(format!(
+                    "Down: {}/s  |  Up: {}/s",
+                    format_bytes(download),
+                    format_bytes(upload),
+                ))
+                .toggler(vis.net, |_| Message::ToggleVisibility(ComponentKind::Net)),
+        );
+
+        // Disk
+        let disk_read = self.disk_read.iter().last().copied().unwrap_or(0);
+        let disk_write = self.disk_write.iter().last().copied().unwrap_or(0);
+        items = items.add(
+            settings_builder("Disk")
+                .description(format!(
+                    "Read: {}/s  |  Write: {}/s",
+                    format_bytes(disk_read),
+                    format_bytes(disk_write),
+                ))
+                .toggler(vis.disk, |_| {
+                    Message::ToggleVisibility(ComponentKind::Disk)
+                }),
+        );
+
+        // GPU
+        let gpu_data = self.gpus.data();
+        if !gpu_data.is_empty() {
+            let gpu_desc = gpu_data
+                .iter()
+                .enumerate()
+                .map(|(idx, data)| {
+                    format!(
+                        "GPU{idx}: {}%  VRAM: {} / {}",
+                        data.usage,
+                        format_bytes(data.used_vram),
+                        format_bytes(data.total_vram),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            items = items.add(
+                settings_builder("GPU")
+                    .description(gpu_desc)
+                    .toggler(vis.gpu, |_| {
+                        Message::ToggleVisibility(ComponentKind::Gpu)
+                    }),
+            );
+        }
+
+        items.into()
     }
 }
 
