@@ -19,16 +19,27 @@ This is a fork of [D-Brox/cosmic-ext-applet-system-monitor](https://github.com/D
 
 ## Installation
 
-Requires [just](https://github.com/casey/just).
+Requires a Rust toolchain and [just](https://github.com/casey/just).
+
+```sh
+git clone https://github.com/bgub/cosmic-ext-applet-sysmon.git
+cd cosmic-ext-applet-sysmon
+just install-user  # builds and installs to ~/.local (no root needed)
+```
+
+Then log out and back in (or run `pkill cosmic-panel` to restart the panel), and add the applet via COSMIC Settings > Desktop > Panel > Applets.
+
+For system-wide installation: `just install` (requires root, installs to `/usr`).
+
+On NixOS, prefix commands with `direnv exec .` (or enter the direnv shell) since the toolchain comes from nix. The package is also available in nixpkgs as `cosmic-ext-applet-sysmon`.
+
+### Development
 
 ```sh
 just dev-install   # one-time setup: symlinks binary into ~/.local/bin, installs desktop/icon/metadata
-just dev-reload    # rebuild + restart cosmic-panel (for iterative development)
-just install-user  # copy binary to ~/.local (no root needed)
-just install       # install system-wide (requires root)
+just dev-reload    # rebuild + restart cosmic-panel
+just check         # clippy with pedantic warnings
 ```
-
-On NixOS, prefix commands with `direnv exec .` (or enter the direnv shell) since the toolchain comes from nix.
 
 ## Differences from upstream
 
