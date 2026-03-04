@@ -18,7 +18,7 @@ features = ["fluent-system", "desktop-requester"]
 
 [dependencies.libcosmic]
 # TODO: Switch back to pop-os/libcosmic once the tiny_skia Canvas damage fix is upstreamed
-# Tracking: https://github.com/pop-os/iced/issues/XXX (upstream PR pending)
+# Tracking: https://github.com/pop-os/iced/pull/270 (upstream PR pending)
 git = "https://github.com/bgub/libcosmic.git"
 branch = "fix/tiny-skia-canvas-damage"
 default-features = false
